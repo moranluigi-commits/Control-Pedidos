@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Pedidos</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f0f11; --bg2: #16161a; --bg3: #1e1e24; --bg4: #26262f;
+    --border: #2e2e38; --border2: #3a3a48;
+    --text: #e8e8f0; --text2: #9090a8; --text3: #5a5a72;
+    --accent: #7c6bff; --accent2: #9d8fff; --accent-bg: rgba(124,107,255,0.12);
+    --green: #3ecf8e; --green-bg: rgba(62,207,142,0.1);
+    --amber: #f59e0b; --amber-bg: rgba(245,158,11,0.1);
+    --red: #f87171;   --red-bg: rgba(248,113,113,0.1);
+    --blue: #60a5fa;  --blue-bg: rgba(96,165,250,0.1);
+    --radius: 10px; --radius-sm: 6px;
+    --font: 'DM Sans', sans-serif; --mono: 'DM Mono', monospace;
+  }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+
+  /* ── SCREENS ── */
+  .screen { display: none; }
+  .screen.active { display: flex; }
+
+  /* ── LOGIN ── */
+  #screen-login {
+    min-height: 100vh; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  #screen-login::before {
+    content: ''; position: absolute; width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(124,107,255,0.07) 0%, transparent 70%);
+    top: -200px; left: 50%; transform: translateX(-50%); pointer-events: none;
+  }
+  .login-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 16px; padding: 40px; width: 400px; position: relative; z-index: 1;
+  }
+  .login-logo { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; margin-bottom: 6px; }
+  .login-logo span { color: var(--accent); }
+  .login-sub { font-size: 13px; color: var(--text2); margin-bottom: 28px; }
+  .login-card label { display: block; font-size: 11px; font-weight: 500; color: var(--text3); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .login-card input {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 11px 14px; color: var(--text);
+    font-family: var(--font); font-size: 14px; margin-bottom: 16px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .login-card input:focus { border-color: var(--accent); }
+  .btn-primary {
+    width: 100%; background: var(--accent); color: #fff; border: none;
+    border-radius: var(--radius-sm); padding: 12px; font-family: var(--font);
+    font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity 0.2s;
+  }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .login-msg { margin-top: 14px; font-size: 13px; text-align: center; min-height: 20px; }
+  .login-msg.ok  { color: var(--green); }
+  .login-msg.err { color: var(--red); }
+  .login-domain-note {
+    margin-top: 16px; padding: 10px 14px; background: var(--bg3);
+    border-radius: var(--radius-sm); font-size: 12px; color: var(--text3); text-align: center;
+  }
+  .login-domain-note span { color: var(--accent2); font-family: var(--mono); }
+
+  /* ── MAGIC SENT ── */
+  #screen-sent { min-height: 100vh; align-items: center; justify-content: center; flex-direction: column; text-align: center; gap: 12px; }
+  .sent-icon { font-size: 40px; margin-bottom: 8px; }
+  .sent-title { font-size: 20px; font-weight: 600; }
+  .sent-sub { font-size: 14px; color: var(--text2); max-width: 340px; line-height: 1.7; }
+  .sent-email { font-family: var(--mono); color: var(--accent2); }
+  .back-link { margin-top: 20px; font-size: 13px; color: var(--text3); cursor: pointer; text-decoration: underline; }
+  .back-link:hover { color: var(--text2); }
+
+  /* ── APP ── */
+  #screen-app { flex-direction: row; min-height: 100vh; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 220px; background: var(--bg2); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0; height: 100vh;
+    position: sticky; top: 0;
+  }
+  .sidebar-logo { padding: 24px 20px 20px; font-size: 16px; font-weight: 600; letter-spacing: -0.3px; border-bottom: 1px solid var(--border); }
+  .sidebar-logo span { color: var(--accent); }
+  .sidebar-nav { padding: 12px 8px; flex: 1; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    border-radius: var(--radius-sm); cursor: pointer; color: var(--text2);
+    font-size: 13px; font-weight: 400; transition: background 0.15s, color 0.15s;
+    margin-bottom: 2px; border: none; background: none; width: 100%;
+    text-align: left; font-family: var(--font);
+  }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: var(--accent-bg); color: var(--accent2); font-weight: 500; }
+  .nav-icon { font-size: 15px; width: 18px; text-align: center; }
+  .sidebar-user { padding: 14px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .user-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-bg); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--accent2); flex-shrink: 0; }
+  .user-info { flex: 1; min-width: 0; }
+  .user-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .user-role { font-size: 11px; color: var(--text3); }
+  .logout-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 14px; padding: 4px; transition: color 0.15s; }
+  .logout-btn:hover { color: var(--red); }
+
+  /* ── MAIN ── */
+  .main { flex: 1; padding: 28px 32px; overflow-y: auto; }
+  .page { display: none; }
+  .page.active { display: block; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .page-title { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+  .page-subtitle { font-size: 13px; color: var(--text2); margin-top: 2px; }
+
+  /* ── STATS ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+  .stat-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-bottom: 8px; }
+  .stat-value { font-size: 28px; font-weight: 600; letter-spacing: -1px; line-height: 1; }
+  .stat-sub { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+  /* ── QUOTA ── */
+  .quota-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .quota-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .quota-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .quota-name { font-size: 13px; font-weight: 500; }
+  .quota-badge { font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 20px; letter-spacing: 0.03em; }
+  .badge-ok   { background: var(--green-bg); color: var(--green); }
+  .badge-warn { background: var(--amber-bg); color: var(--amber); }
+  .badge-full { background: var(--red-bg);   color: var(--red); }
+  .quota-bar-bg { height: 5px; border-radius: 3px; background: var(--bg4); margin-bottom: 8px; overflow: hidden; }
+  .quota-bar-fill { height: 5px; border-radius: 3px; transition: width 0.4s ease; }
+  .quota-stats { display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); }
+
+  /* ── TABLE ── */
+  .table-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .table-toolbar { padding: 14px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .filter-pill { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; border: 1px solid var(--border); background: none; color: var(--text2); cursor: pointer; transition: all 0.15s; font-family: var(--font); }
+  .filter-pill:hover { border-color: var(--border2); color: var(--text); }
+  .filter-pill.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent2); }
+  .toolbar-right { margin-left: auto; }
+  .search-input { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 12px; color: var(--text); font-family: var(--font); font-size: 13px; outline: none; width: 200px; transition: border-color 0.2s; }
+  .search-input:focus { border-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); border-bottom: 1px solid var(--border); background: var(--bg3); }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--bg3); }
+  tbody td { padding: 11px 16px; font-size: 13px; vertical-align: middle; }
+  .td-cliente { font-weight: 500; }
+  .td-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .canal-tag { font-size: 11px; font-family: var(--mono); padding: 2px 8px; border-radius: 4px; display: inline-block; }
+  .canal-Email    { background: var(--blue-bg);  color: var(--blue); }
+  .canal-WhatsApp { background: var(--green-bg); color: var(--green); }
+  .canal-Teléfono { background: var(--amber-bg); color: var(--amber); }
+  .canal-Otro     { background: var(--bg4);      color: var(--text2); }
+  .estado-tag { font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 20px; display: inline-block; }
+  .e-Nuevo      { background: var(--blue-bg);  color: var(--blue); }
+  .e-En-proceso { background: var(--amber-bg); color: var(--amber); }
+  .e-Listo      { background: var(--green-bg); color: var(--green); }
+  .e-Cancelado  { background: var(--red-bg);   color: var(--red); }
+  .row-actions { display: flex; gap: 6px; opacity: 0; transition: opacity 0.15s; }
+  tbody tr:hover .row-actions { opacity: 1; }
+  .action-btn { padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 500; border: 1px solid var(--border2); background: none; color: var(--text2); cursor: pointer; font-family: var(--font); transition: all 0.12s; }
+  .action-btn:hover { background: var(--bg4); color: var(--text); }
+  .action-btn.danger:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── MODAL ── */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 28px; width: 480px; max-width: 95vw; max-height: 90vh; overflow-y: auto; animation: modalIn 0.18s ease; }
+  @keyframes modalIn { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
+  .form-group { margin-bottom: 16px; }
+  .form-label { display: block; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text3); margin-bottom: 6px; }
+  .form-control { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 13px; color: var(--text); font-family: var(--font); font-size: 14px; outline: none; transition: border-color 0.2s; }
+  .form-control:focus { border-color: var(--accent); }
+  select.form-control { cursor: pointer; }
+  textarea.form-control { resize: vertical; min-height: 80px; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
+  .btn-secondary { padding: 9px 18px; border-radius: var(--radius-sm); background: none; border: 1px solid var(--border2); color: var(--text2); font-family: var(--font); font-size: 13px; cursor: pointer; transition: all 0.15s; }
+  .btn-secondary:hover { background: var(--bg3); color: var(--text); }
+  .btn-modal-ok { padding: 9px 18px; border-radius: var(--radius-sm); background: var(--accent); border: none; color: #fff; font-family: var(--font); font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity 0.15s; }
+  .btn-modal-ok:hover { opacity: 0.85; }
+  .btn-modal-ok:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── SETTINGS ── */
+  .settings-section { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; margin-bottom: 18px; }
+  .settings-section-title { font-size: 11px; font-weight: 500; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; }
+  .settings-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-row-label { font-size: 13px; font-weight: 500; }
+  .settings-row-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .team-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .team-member-row:last-child { border-bottom: none; }
+  .member-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--accent-bg); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--accent2); flex-shrink: 0; }
+  .member-info { flex: 1; }
+  .member-name { font-size: 13px; font-weight: 500; }
+  .member-meta { font-size: 11px; color: var(--text3); }
+  .delete-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 13px; padding: 4px 8px; border-radius: 4px; transition: all 0.15s; font-family: var(--font); }
+  .delete-btn:hover { background: var(--red-bg); color: var(--red); }
+
+  /* ── MISC ── */
+  .add-btn { display: flex; align-items: center; gap: 7px; padding: 9px 16px; background: var(--accent); border: none; border-radius: var(--radius-sm); color: #fff; font-family: var(--font); font-size: 13px; font-weight: 500; cursor: pointer; transition: opacity 0.15s; }
+  .add-btn:hover { opacity: 0.85; }
+  .section-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin-bottom: 12px; }
+  .empty-state { text-align: center; padding: 40px 24px; color: var(--text3); }
+  .empty-title { font-size: 14px; font-weight: 500; color: var(--text2); margin-bottom: 4px; }
+  .empty-sub { font-size: 12px; }
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--bg4); border: 1px solid var(--border2); border-radius: var(--radius-sm); padding: 12px 18px; font-size: 13px; color: var(--text); z-index: 9999; opacity: 0; transform: translateY(8px); transition: all 0.2s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: none; }
+  .loading { display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--text3); font-size: 13px; gap: 10px; }
+  .spinner { width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ══ PANTALLAS ══ -->
+
+<!-- Login -->
+<div id="screen-login" class="screen active">
+  <div class="login-card">
+    <div class="login-logo">Control<span>.</span>Pedidos</div>
+    <div class="login-sub">Ingresa con tu correo corporativo</div>
+    <label>Correo corporativo</label>
+    <input type="email" id="login-email" placeholder="tu.nombre@miempresa.com" autocomplete="email">
+    <div id="login-msg" class="login-msg"></div>
+    <button class="btn-primary" id="login-btn" onclick="sendMagicLink()">Enviar enlace de acceso</button>
+    <div class="login-domain-note">Solo se permite acceso desde <span>@miempresa.com</span></div>
+  </div>
+</div>
+
+<!-- Magic link enviado -->
+<div id="screen-sent" class="screen">
+  <div class="sent-icon">✉</div>
+  <div class="sent-title">Revisa tu correo</div>
+  <div class="sent-sub">Enviamos un enlace de acceso a<br><span class="sent-email" id="sent-email-display">—</span><br>Haz clic en el enlace para entrar. Expira en 1 hora.</div>
+  <div class="back-link" onclick="showScreen('login')">← Usar otro correo</div>
+</div>
+
+<!-- App -->
+<div id="screen-app" class="screen">
+  <aside class="sidebar">
+    <div class="sidebar-logo">Control<span>.</span>Pedidos</div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" onclick="showPage('dashboard', this)">
+        <span class="nav-icon">◈</span> Dashboard
+      </button>
+      <button class="nav-item" onclick="showPage('pedidos', this)">
+        <span class="nav-icon">◷</span> Pedidos
+      </button>
+      <button class="nav-item" onclick="showPage('cotizadores', this)">
+        <span class="nav-icon">◉</span> Cotizadores
+      </button>
+      <button class="nav-item" id="nav-config" onclick="showPage('config', this)" style="display:none">
+        <span class="nav-icon">◎</span> Configuración
+      </button>
+    </nav>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="user-avatar">?</div>
+      <div class="user-info">
+        <div class="user-name" id="user-display-name">—</div>
+        <div class="user-role" id="user-role-label">—</div>
+      </div>
+      <button class="logout-btn" onclick="doLogout()" title="Cerrar sesión">⎋</button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- Dashboard -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Dashboard</div>
+          <div class="page-subtitle" id="dash-date">—</div>
+        </div>
+        <button class="add-btn" onclick="openModalPedido()">+ Nuevo pedido</button>
+      </div>
+      <div class="stats-grid" id="stats-grid"></div>
+      <div class="section-label">Cupos por cotizador</div>
+      <div class="quota-grid" id="quota-grid" style="margin-top:12px"></div>
+      <div class="section-label" style="margin-top:8px">Últimos pedidos</div>
+      <div class="table-wrap" style="margin-top:12px">
+        <table><thead><tr><th>Cliente</th><th>Canal</th><th>Cotizador</th><th>Estado</th><th>Fecha</th></tr></thead>
+        <tbody id="dash-table"></tbody></table>
+      </div>
+    </div>
+
+    <!-- Pedidos -->
+    <div class="page" id="page-pedidos">
+      <div class="page-header">
+        <div><div class="page-title">Pedidos</div><div class="page-subtitle">Todos los pedidos</div></div>
+        <button class="add-btn" onclick="openModalPedido()">+ Nuevo pedido</button>
+      </div>
+      <div class="table-wrap">
+        <div class="table-toolbar">
+          <button class="filter-pill active" onclick="setFilter('todos',this)">Todos</button>
+          <button class="filter-pill" onclick="setFilter('Nuevo',this)">Nuevos</button>
+          <button class="filter-pill" onclick="setFilter('En proceso',this)">En proceso</button>
+          <button class="filter-pill" onclick="setFilter('Listo',this)">Listos</button>
+          <button class="filter-pill" onclick="setFilter('Cancelado',this)">Cancelados</button>
+          <div class="toolbar-right">
+            <input class="search-input" placeholder="Buscar cliente..." oninput="searchQ=this.value;renderPedidosTable()">
+          </div>
+        </div>
+        <table><thead><tr><th>Cliente</th><th>Canal</th><th>Cotizador</th><th>Estado</th><th>Notas</th><th>Fecha</th><th></th></tr></thead>
+        <tbody id="pedidos-table"></tbody></table>
+      </div>
+    </div>
+
+    <!-- Cotizadores -->
+    <div class="page" id="page-cotizadores">
+      <div class="page-header">
+        <div><div class="page-title">Cotizadores</div><div class="page-subtitle">Carga de trabajo en tiempo real</div></div>
+      </div>
+      <div class="quota-grid" id="cot-quota-grid" style="margin-bottom:24px"></div>
+      <div class="section-label" style="margin-bottom:12px">Detalle por cotizador</div>
+      <div id="cot-detail"></div>
+    </div>
+
+    <!-- Config -->
+    <div class="page" id="page-config">
+      <div class="page-header">
+        <div><div class="page-title">Configuración</div><div class="page-subtitle">Equipo y cupos</div></div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">Cotizadores</div>
+        <div id="team-list"></div>
+        <div style="margin-top:16px">
+          <button class="add-btn" style="font-size:12px;padding:7px 14px" onclick="openModalMember()">+ Agregar cotizador</button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">Cupo máximo global</div>
+        <div class="settings-row">
+          <div>
+            <div class="settings-row-label">Pedidos activos máximos por cotizador</div>
+            <div class="settings-row-sub">Se aplica a cotizadores sin cupo personalizado</div>
+          </div>
+          <input type="number" id="global-cupo-input" class="form-control" style="width:80px;text-align:center" min="1" max="50" onchange="saveCupoGlobal(this.value)">
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">Roles de usuario</div>
+        <div id="roles-list"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ══ MODAL PEDIDO ══ -->
+<div class="modal-overlay" id="modal-pedido">
+  <div class="modal">
+    <div class="modal-title" id="modal-pedido-title">Nuevo pedido</div>
+    <div class="form-group"><label class="form-label">Cliente</label><input type="text" class="form-control" id="f-cliente" placeholder="Nombre del cliente o empresa"></div>
+    <div class="form-group"><label class="form-label">Canal de origen</label>
+      <select class="form-control" id="f-canal"><option>Email</option><option>WhatsApp</option><option>Teléfono</option><option>Otro</option></select>
+    </div>
+    <div class="form-group"><label class="form-label">Cotizador asignado</label><select class="form-control" id="f-cotizador"></select></div>
+    <div class="form-group"><label class="form-label">Estado</label>
+      <select class="form-control" id="f-estado"><option>Nuevo</option><option>En proceso</option><option>Listo</option><option>Cancelado</option></select>
+    </div>
+    <div class="form-group"><label class="form-label">Notas</label><textarea class="form-control" id="f-notas" placeholder="Detalles del pedido..."></textarea></div>
+    <input type="hidden" id="f-id">
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('modal-pedido')">Cancelar</button>
+      <button class="btn-modal-ok" id="btn-save-pedido" onclick="savePedido()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL COTIZADOR ══ -->
+<div class="modal-overlay" id="modal-member">
+  <div class="modal">
+    <div class="modal-title">Agregar cotizador</div>
+    <div class="form-group"><label class="form-label">Nombre</label><input type="text" class="form-control" id="m-nombre" placeholder="Nombre Apellido"></div>
+    <div class="form-group"><label class="form-label">Email (opcional)</label><input type="email" class="form-control" id="m-email" placeholder="nombre@miempresa.com"></div>
+    <div class="form-group"><label class="form-label">Cupo máximo</label><input type="number" class="form-control" id="m-cupo" value="5" min="1" max="50"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('modal-member')">Cancelar</button>
+      <button class="btn-modal-ok" onclick="saveMember()">Agregar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════
+// CONFIGURACIÓN — reemplaza estos 3 valores
+// ══════════════════════════════════════════════
+const SUPABASE_URL    = 'https://XXXXXXXXXXXXXXXX.supabase.co';   // Tu Project URL
+const SUPABASE_ANON   = 'eyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'; // Tu anon public key
+const ALLOWED_DOMAIN  = '@miempresa.com';                          // Tu dominio corporativo
+// ══════════════════════════════════════════════
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// ── STATE ──
+let cotizadores = [];
+let pedidos     = [];
+let cupoGlobal  = 5;
+let userSession = null;
+let userRol     = 'cotizador';
+let filterState = 'todos';
+let searchQ     = '';
+
+// ── SCREENS ──
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+}
+
+// ── AUTH ──
+async function sendMagicLink() {
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const msg   = document.getElementById('login-msg');
+  const btn   = document.getElementById('login-btn');
+
+  if (!email) { setMsg(msg, 'Ingresa tu correo', 'err'); return; }
+  if (!email.endsWith(ALLOWED_DOMAIN)) {
+    setMsg(msg, `Solo se permiten correos ${ALLOWED_DOMAIN}`, 'err'); return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  const { error } = await db.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+  btn.disabled = false; btn.textContent = 'Enviar enlace de acceso';
+
+  if (error) { setMsg(msg, 'Error al enviar. Intenta de nuevo.', 'err'); return; }
+  document.getElementById('sent-email-display').textContent = email;
+  showScreen('sent');
+}
+
+function setMsg(el, text, type) {
+  el.textContent = text;
+  el.className = 'login-msg ' + (type || '');
+}
+
+document.getElementById('login-email').addEventListener('keydown', e => { if (e.key === 'Enter') sendMagicLink(); });
+
+async function doLogout() {
+  await db.auth.signOut();
+  showScreen('login');
+}
+
+// ── SESSION LISTENER ──
+db.auth.onAuthStateChange(async (event, session) => {
+  if (session) {
+    userSession = session;
+    await loadUserRole();
+    await loadAll();
+    bootApp();
+  }
+});
+
+async function loadUserRole() {
+  const { data } = await db.from('user_roles').select('rol, nombre').eq('user_id', userSession.user.id).single();
+  userRol = data?.rol || 'cotizador';
+}
+
+async function loadAll() {
+  const [c, p, cfg] = await Promise.all([
+    db.from('cotizadores').select('*').eq('activo', true).order('nombre'),
+    db.from('pedidos').select('*').order('created_at', { ascending: false }),
+    db.from('config').select('*'),
+  ]);
+  cotizadores = c.data || [];
+  pedidos     = p.data || [];
+  const cfgCupo = (cfg.data || []).find(r => r.key === 'cupo_max');
+  cupoGlobal = cfgCupo ? parseInt(cfgCupo.value) : 5;
+}
+
+function bootApp() {
+  const email = userSession.user.email;
+  const nombre = email.split('@')[0].replace('.', ' ').replace(/\b\w/g, l => l.toUpperCase());
+  document.getElementById('user-display-name').textContent = nombre;
+  document.getElementById('user-role-label').textContent = userRol === 'admin' ? 'Administrador' : 'Cotizador';
+  document.getElementById('user-avatar').textContent = nombre.charAt(0);
+  document.getElementById('nav-config').style.display = userRol === 'admin' ? 'flex' : 'none';
+  document.getElementById('dash-date').textContent = new Date().toLocaleDateString('es-MX', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  showScreen('app');
+  renderAll();
+}
+
+// ── NAV ──
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── HELPERS ──
+function cotizadorById(id) { return cotizadores.find(c => c.id === id) || { nombre: '—', cupo: cupoGlobal }; }
+function activos(cotId) { return pedidos.filter(p => p.cotizador_id === cotId && p.estado !== 'Cancelado' && p.estado !== 'Listo').length; }
+function fmtDate(d) { try { return new Date(d).toLocaleDateString('es-MX', { day:'2-digit', month:'short' }); } catch { return d; } }
+
+function canalTag(c) {
+  return `<span class="canal-tag canal-${c}">${c}</span>`;
+}
+function estadoTag(e) {
+  const cls = e.replace(' ', '-');
+  return `<span class="estado-tag e-${cls}">${e}</span>`;
+}
+
+// ── RENDER ──
+function renderAll() {
+  renderStats();
+  renderQuota('quota-grid');
+  renderDashTable();
+  renderPedidosTable();
+  renderCotizadores();
+  if (userRol === 'admin') renderConfig();
+}
+
+function renderStats() {
+  const total   = pedidos.length;
+  const nuevos  = pedidos.filter(p => p.estado === 'Nuevo').length;
+  const proceso = pedidos.filter(p => p.estado === 'En proceso').length;
+  const libres  = cotizadores.reduce((a, c) => a + Math.max(0, (c.cupo || cupoGlobal) - activos(c.id)), 0);
+  document.getElementById('stats-grid').innerHTML = [
+    { label:'Total pedidos',  value: total,   sub:'en el sistema',          color:'var(--text)' },
+    { label:'Nuevos',         value: nuevos,  sub:'recibidos sin trabajar', color:'var(--blue)' },
+    { label:'En proceso',     value: proceso, sub:'siendo trabajados',      color:'var(--amber)' },
+    { label:'Cupos libres',   value: libres,  sub:'disponibles hoy',        color:'var(--green)' },
+  ].map(s => `<div class="stat-card">
+    <div class="stat-label">${s.label}</div>
+    <div class="stat-value" style="color:${s.color}">${s.value}</div>
+    <div class="stat-sub">${s.sub}</div>
+  </div>`).join('');
+}
+
+function renderQuota(id) {
+  document.getElementById(id).innerHTML = cotizadores.map(c => {
+    const act  = activos(c.id);
+    const max  = c.cupo || cupoGlobal;
+    const pct  = Math.min(100, Math.round((act / max) * 100));
+    const lib  = Math.max(0, max - act);
+    const col  = pct >= 100 ? 'var(--red)' : pct >= 80 ? 'var(--amber)' : 'var(--green)';
+    const badge = lib === 0 ? '<span class="quota-badge badge-full">Sin cupo</span>'
+                : lib <= 1  ? '<span class="quota-badge badge-warn">Casi lleno</span>'
+                :             '<span class="quota-badge badge-ok">Disponible</span>';
+    return `<div class="quota-card">
+      <div class="quota-header"><span class="quota-name">${c.nombre}</span>${badge}</div>
+      <div class="quota-bar-bg"><div class="quota-bar-fill" style="width:${pct}%;background:${col}"></div></div>
+      <div class="quota-stats"><span>${act}/${max} activos</span><span>${lib} libre${lib!==1?'s':''}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function renderDashTable() {
+  const rows = pedidos.slice(0, 8);
+  const tb = document.getElementById('dash-table');
+  tb.innerHTML = rows.length ? rows.map(p => `<tr>
+    <td><div class="td-cliente">${p.cliente}</div></td>
+    <td>${canalTag(p.canal)}</td>
+    <td>${cotizadorById(p.cotizador_id).nombre}</td>
+    <td>${estadoTag(p.estado)}</td>
+    <td style="color:var(--text3)">${fmtDate(p.created_at)}</td>
+  </tr>`).join('')
+  : `<tr><td colspan="5"><div class="empty-state"><div class="empty-title">Sin pedidos aún</div></div></td></tr>`;
+}
+
+function renderPedidosTable() {
+  let data = [...pedidos];
+  if (filterState !== 'todos') data = data.filter(p => p.estado === filterState);
+  if (searchQ) data = data.filter(p => p.cliente.toLowerCase().includes(searchQ.toLowerCase()));
+  const tb = document.getElementById('pedidos-table');
+  tb.innerHTML = data.length ? data.map(p => `<tr>
+    <td><div class="td-cliente">${p.cliente}</div></td>
+    <td>${canalTag(p.canal)}</td>
+    <td>${cotizadorById(p.cotizador_id).nombre}</td>
+    <td>${estadoTag(p.estado)}</td>
+    <td style="color:var(--text3);font-size:12px;max-width:140px">${p.notas || '—'}</td>
+    <td style="color:var(--text3)">${fmtDate(p.created_at)}</td>
+    <td><div class="row-actions">
+      <button class="action-btn" onclick="event.stopPropagation();editPedido('${p.id}')">Editar</button>
+      ${userRol==='admin'?`<button class="action-btn danger" onclick="event.stopPropagation();deletePedido('${p.id}')">Eliminar</button>`:''}
+    </div></td>
+  </tr>`).join('')
+  : `<tr><td colspan="7"><div class="empty-state"><div class="empty-title">Sin resultados</div></div></td></tr>`;
+}
+
+function renderCotizadores() {
+  renderQuota('cot-quota-grid');
+  document.getElementById('cot-detail').innerHTML = cotizadores.map(c => {
+    const cPedidos = pedidos.filter(p => p.cotizador_id === c.id && p.estado !== 'Cancelado' && p.estado !== 'Listo');
+    const rows = cPedidos.length
+      ? cPedidos.map(p => `<tr>
+          <td><div class="td-cliente">${p.cliente}</div></td>
+          <td>${canalTag(p.canal)}</td>
+          <td>${estadoTag(p.estado)}</td>
+          <td style="color:var(--text3)">${fmtDate(p.created_at)}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="4"><div class="empty-state" style="padding:20px"><div class="empty-title" style="font-size:12px">Sin pedidos activos</div></div></td></tr>`;
+    return `<div class="table-wrap" style="margin-bottom:14px">
+      <div class="table-toolbar" style="padding:12px 16px">
+        <span style="font-size:13px;font-weight:500">${c.nombre}</span>
+        <span class="quota-badge ${activos(c.id)>=(c.cupo||cupoGlobal)?'badge-full':activos(c.id)===0?'badge-ok':'badge-warn'}" style="margin-left:8px">${activos(c.id)}/${c.cupo||cupoGlobal} activos</span>
+      </div>
+      <table><thead><tr><th>Cliente</th><th>Canal</th><th>Estado</th><th>Fecha</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>`;
+  }).join('');
+}
+
+async function renderConfig() {
+  document.getElementById('global-cupo-input').value = cupoGlobal;
+  document.getElementById('team-list').innerHTML = cotizadores.map(c => `
+    <div class="team-member-row">
+      <div class="member-avatar">${c.nombre.charAt(0)}</div>
+      <div class="member-info">
+        <div class="member-name">${c.nombre}</div>
+        <div class="member-meta">${activos(c.id)} activos · cupo ${c.cupo || cupoGlobal}</div>
+      </div>
+      <button class="delete-btn" onclick="deleteMember('${c.id}')">✕</button>
+    </div>`).join('');
+
+  const { data: roles } = await db.from('user_roles').select('*');
+  document.getElementById('roles-list').innerHTML = (roles || []).map(r => `
+    <div class="team-member-row">
+      <div class="member-avatar" style="background:var(--bg4);color:var(--text2)">${(r.nombre||r.user_id).charAt(0).toUpperCase()}</div>
+      <div class="member-info">
+        <div class="member-name">${r.nombre || r.user_id}</div>
+        <div class="member-meta">${r.rol}</div>
+      </div>
+      <select class="form-control" style="width:130px" onchange="changeRol('${r.user_id}',this.value)">
+        <option ${r.rol==='cotizador'?'selected':''}>cotizador</option>
+        <option ${r.rol==='admin'?'selected':''}>admin</option>
+      </select>
+    </div>`).join('') || '<div style="color:var(--text3);font-size:13px;padding:10px 0">Sin usuarios registrados aún.</div>';
+}
+
+// ── FILTERS ──
+function setFilter(f, btn) {
+  filterState = f;
+  document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderPedidosTable();
+}
+
+// ── MODAL PEDIDO ──
+function openModalPedido() {
+  document.getElementById('f-cliente').value = '';
+  document.getElementById('f-canal').value = 'Email';
+  document.getElementById('f-estado').value = 'Nuevo';
+  document.getElementById('f-notas').value = '';
+  document.getElementById('f-id').value = '';
+  document.getElementById('modal-pedido-title').textContent = 'Nuevo pedido';
+  document.getElementById('f-cotizador').innerHTML = cotizadores.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+  document.getElementById('modal-pedido').classList.add('open');
+}
+function editPedido(id) {
+  const p = pedidos.find(x => x.id === id);
+  if (!p) return;
+  openModalPedido();
+  document.getElementById('modal-pedido-title').textContent = 'Editar pedido';
+  document.getElementById('f-cliente').value = p.cliente;
+  document.getElementById('f-canal').value = p.canal;
+  document.getElementById('f-cotizador').value = p.cotizador_id;
+  document.getElementById('f-estado').value = p.estado;
+  document.getElementById('f-notas').value = p.notas || '';
+  document.getElementById('f-id').value = p.id;
+}
+
+async function savePedido() {
+  const cliente = document.getElementById('f-cliente').value.trim();
+  if (!cliente) { alert('Ingresa el nombre del cliente'); return; }
+  const btn = document.getElementById('btn-save-pedido');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  const payload = {
+    cliente,
+    canal:         document.getElementById('f-canal').value,
+    cotizador_id:  document.getElementById('f-cotizador').value,
+    estado:        document.getElementById('f-estado').value,
+    notas:         document.getElementById('f-notas').value.trim(),
+    created_by:    userSession.user.id,
+  };
+  const existingId = document.getElementById('f-id').value;
+  let error;
+  if (existingId) {
+    ({ error } = await db.from('pedidos').update(payload).eq('id', existingId));
+  } else {
+    ({ error } = await db.from('pedidos').insert(payload));
+  }
+  btn.disabled = false; btn.textContent = 'Guardar';
+  if (error) { alert('Error al guardar: ' + error.message); return; }
+  closeModal('modal-pedido');
+  await loadAll();
+  renderAll();
+  showToast(existingId ? 'Pedido actualizado' : 'Pedido agregado');
+}
+
+async function deletePedido(id) {
+  if (!confirm('¿Eliminar este pedido?')) return;
+  const { error } = await db.from('pedidos').delete().eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  await loadAll(); renderAll();
+  showToast('Pedido eliminado');
+}
+
+// ── MODAL COTIZADOR ──
+function openModalMember() {
+  document.getElementById('m-nombre').value = '';
+  document.getElementById('m-email').value = '';
+  document.getElementById('m-cupo').value = cupoGlobal;
+  document.getElementById('modal-member').classList.add('open');
+}
+async function saveMember() {
+  const nombre = document.getElementById('m-nombre').value.trim();
+  const email  = document.getElementById('m-email').value.trim();
+  const cupo   = parseInt(document.getElementById('m-cupo').value) || cupoGlobal;
+  if (!nombre) { alert('Ingresa un nombre'); return; }
+  const { error } = await db.from('cotizadores').insert({ nombre, email: email || null, cupo });
+  if (error) { alert('Error: ' + error.message); return; }
+  closeModal('modal-member');
+  await loadAll(); renderAll();
+  showToast('Cotizador agregado');
+}
+async function deleteMember(id) {
+  if (!confirm('¿Desactivar este cotizador?')) return;
+  const { error } = await db.from('cotizadores').update({ activo: false }).eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  await loadAll(); renderAll();
+  showToast('Cotizador desactivado');
+}
+
+// ── CUPO GLOBAL ──
+async function saveCupoGlobal(v) {
+  const val = String(parseInt(v) || 5);
+  await db.from('config').upsert({ key: 'cupo_max', value: val });
+  cupoGlobal = parseInt(val);
+  renderAll();
+  showToast('Cupo actualizado');
+}
+
+// ── ROL ──
+async function changeRol(userId, rol) {
+  await db.from('user_roles').update({ rol }).eq('user_id', userId);
+  showToast('Rol actualizado');
+}
+
+// ── UTILS ──
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); }));
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2400);
+}
+</script>
+</body>
+</html>
